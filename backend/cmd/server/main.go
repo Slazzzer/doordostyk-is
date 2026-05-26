@@ -33,9 +33,6 @@ func main() {
 	if err := db.EnsureSuppliers(ctx, pool); err != nil {
 		log.Printf("seed suppliers: %v", err)
 	}
-	if err := db.EnsureExtraProducts(ctx, pool); err != nil {
-		log.Printf("seed products: %v", err)
-	}
 	if err := db.EnsureStockReservationObjects(ctx, pool); err != nil {
 		log.Printf("seed stock reservation: %v", err)
 	}

@@ -1,7 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import api from '../api.js'
 import { useFlash } from '../composables/useFlash.js'
+import { usePagination } from '../composables/usePagination.js'
+import PaginationBar from '../components/PaginationBar.vue'
 import { formatPhoneInput, isValidPhone, blockNonDigitKey, isStrongPassword } from '../composables/validators.js'
 
 const { showFlash } = useFlash()
@@ -31,6 +33,19 @@ const prodEdit = ref(null)
 const suppliers = ref([])
 const supForm = ref({ name: '', address: '', phone: '' })
 const supEdit = ref(null)
+
+const adminList = computed(() => {
+  switch (tab.value) {
+    case 'users': return users.value
+    case 'customers': return customers.value
+    case 'categories': return categories.value
+    case 'products': return products.value
+    case 'suppliers': return suppliers.value
+    default: return []
+  }
+})
+const { page, pageSize, total, paged, resetPage } = usePagination(adminList, 10)
+watch(tab, resetPage)
 
 function onSupPhoneInput(e) {
   supForm.value.phone = formatPhoneInput(e.target.value)
@@ -230,7 +245,7 @@ onMounted(loadAll)
       <table>
         <thead><tr><th>ID</th><th>ФИО</th><th>Логин</th><th>Роль</th><th></th></tr></thead>
         <tbody>
-          <tr v-for="u in users" :key="u.user_id">
+          <tr v-for="u in paged" :key="u.user_id">
             <td>#{{ u.user_id }}</td><td>{{ u.user_full_name }}</td>
             <td>{{ u.user_login }}</td><td>{{ u.user_role }}</td>
             <td>
@@ -268,7 +283,7 @@ onMounted(loadAll)
       <table>
         <thead><tr><th>ID</th><th>ФИО</th><th>Email</th><th>Телефон</th><th></th></tr></thead>
         <tbody>
-          <tr v-for="c in customers" :key="c.customer_id">
+          <tr v-for="c in paged" :key="c.customer_id">
             <td>#{{ c.customer_id }}</td>
             <td>{{ c.customer_full_name }}</td>
             <td>{{ c.customer_email || '-' }}</td>
@@ -302,7 +317,7 @@ onMounted(loadAll)
       <table>
         <thead><tr><th>ID</th><th>Название</th><th>Описание</th><th></th></tr></thead>
         <tbody>
-          <tr v-for="c in categories" :key="c.category_id">
+          <tr v-for="c in paged" :key="c.category_id">
             <td>#{{ c.category_id }}</td><td>{{ c.category_name }}</td><td>{{ c.category_description || '-' }}</td>
             <td>
               <button class="small secondary" @click="editCat(c)">Изменить</button>
@@ -346,7 +361,7 @@ onMounted(loadAll)
       <table>
         <thead><tr><th>ID</th><th>Категория</th><th>Название</th><th>Размеры</th><th>Цена</th><th></th></tr></thead>
         <tbody>
-          <tr v-for="p in products" :key="p.product_id">
+          <tr v-for="p in paged" :key="p.product_id">
             <td>#{{ p.product_id }}</td><td>{{ p.category_name }}</td>
             <td>{{ p.product_name }}</td><td>{{ p.product_dimensions || '-' }}</td>
             <td>{{ p.product_retail_price || '-' }}</td>
@@ -384,7 +399,7 @@ onMounted(loadAll)
       <table>
         <thead><tr><th>ID</th><th>Организация</th><th>Адрес</th><th>Телефон</th><th></th></tr></thead>
         <tbody>
-          <tr v-for="s in suppliers" :key="s.supplier_id">
+          <tr v-for="s in paged" :key="s.supplier_id">
             <td>#{{ s.supplier_id }}</td><td>{{ s.organization_name }}</td>
             <td>{{ s.supplier_address || '-' }}</td><td>{{ s.supplier_phone_number || '-' }}</td>
             <td>
@@ -397,4 +412,12 @@ onMounted(loadAll)
       </table>
     </div>
   </template>
+
+  <PaginationBar
+    v-if="adminList.length"
+    v-model:page="page"
+    :page-size="pageSize"
+    :total="total"
+    style="margin-top:12px"
+  />
 </template>

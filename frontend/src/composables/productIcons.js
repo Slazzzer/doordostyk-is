@@ -70,6 +70,44 @@ const icons = {
       <rect x="22" y="42" width="52" height="10" fill="#a1887f"/>
       <rect x="22" y="62" width="52" height="10" fill="#bcaaa4"/>
     </svg>`
+  ),
+  wreath: svgToDataUri(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+      <circle cx="48" cy="48" r="28" fill="none" stroke="#2e7d32" stroke-width="8"/>
+      <circle cx="48" cy="48" r="18" fill="none" stroke="#43a047" stroke-width="6"/>
+      <circle cx="30" cy="42" r="5" fill="#c62828"/>
+      <circle cx="66" cy="44" r="5" fill="#c62828"/>
+      <circle cx="48" cy="68" r="5" fill="#c62828"/>
+      <rect x="44" y="12" width="8" height="14" rx="2" fill="#8d6e63"/>
+    </svg>`
+  ),
+  nameplate: svgToDataUri(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+      <rect x="18" y="36" width="60" height="28" rx="6" fill="#b0bec5"/>
+      <rect x="22" y="40" width="52" height="20" rx="4" fill="#eceff1"/>
+      <text x="48" y="54" text-anchor="middle" font-size="10" fill="#546e7a" font-family="sans-serif">HOME</text>
+    </svg>`
+  ),
+  knocker: svgToDataUri(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+      <rect x="42" y="16" width="12" height="24" rx="3" fill="#8d6e63"/>
+      <circle cx="48" cy="58" r="18" fill="#ffb300"/>
+      <circle cx="48" cy="58" r="12" fill="#ffc107"/>
+    </svg>`
+  ),
+  sticker: svgToDataUri(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+      <rect x="24" y="20" width="48" height="56" rx="4" fill="#f48fb1"/>
+      <circle cx="36" cy="40" r="6" fill="#f06292"/>
+      <circle cx="56" cy="36" r="5" fill="#ec407a"/>
+      <path d="M30 58 Q48 72 66 54" fill="none" stroke="#ad1457" stroke-width="3"/>
+    </svg>`
+  ),
+  numberPlate: svgToDataUri(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+      <rect x="20" y="38" width="56" height="24" rx="4" fill="#37474f"/>
+      <text x="48" y="54" text-anchor="middle" font-size="14" fill="#eceff1" font-family="sans-serif">12</text>
+    </svg>`
   )
 }
 
@@ -82,11 +120,17 @@ export function getProductIcon(product) {
   if (name.includes('пен')) return icons.foam
   if (name.includes('петл')) return icons.hinge
   if (name.includes('налич')) return icons.trim
+  if (name.includes('венок')) return icons.wreath
+  if (name.includes('таблич')) return icons.nameplate
+  if (name.includes('молоток')) return icons.knocker
+  if (name.includes('номер') || name.includes('квартир')) return icons.numberPlate
+  if (name.includes('наклей')) return icons.sticker
 
   if (catId === 1) return icons.entryDoor
   if (catId === 2) return icons.interiorDoor
   if (catId === 3) return icons.handle
   if (catId === 4) return icons.trim
+  if (catId === 5) return icons.wreath
 
   return icons.default
 }

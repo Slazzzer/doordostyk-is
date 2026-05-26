@@ -2,11 +2,14 @@
 import { ref, onMounted, watch } from 'vue'
 import api from '../api.js'
 import { useFlash } from '../composables/useFlash.js'
+import { usePagination } from '../composables/usePagination.js'
+import PaginationBar from '../components/PaginationBar.vue'
 
 const { showFlash } = useFlash()
 const orders = ref([])
 const status = ref('новый')
 const loading = ref(false)
+const { page, pageSize, total, paged } = usePagination(orders, 10)
 
 async function load() {
   loading.value = true
@@ -38,7 +41,7 @@ const fmtDate = d => new Date(d).toLocaleDateString('ru-RU')
 const statusClass = s => ({ 'новый':'new', 'выполнен':'done', 'отклонён':'rejected' }[s] || 'new')
 
 onMounted(load)
-watch(status, load)
+watch(status, () => { page.value = 1; load() })
 </script>
 
 <template>
@@ -64,7 +67,7 @@ watch(status, load)
         </tr>
       </thead>
       <tbody>
-        <tr v-for="o in orders" :key="o.order_id">
+        <tr v-for="o in paged" :key="o.order_id">
           <td>#{{ o.order_id }}</td>
           <td>{{ fmtDate(o.order_date) }}</td>
           <td>{{ o.customer_name }}</td>
@@ -84,4 +87,5 @@ watch(status, load)
       </tbody>
     </table>
   </div>
+  <PaginationBar v-if="orders.length" v-model:page="page" :page-size="pageSize" :total="total" />
 </template>

@@ -29,7 +29,7 @@ func (h *Handler) CreateOrderByCustomer(c *gin.Context) {
 	cl := middleware.CurrentClaims(c)
 
 	var balance int
-	err := h.pool.QueryRow(c, `SELECT fn_product_balance($1)`, req.ProductID).Scan(&balance)
+	err := h.pool.QueryRow(c, `SELECT fn_product_balance_available($1, NULL, NULL)`, req.ProductID).Scan(&balance)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "товар не найден"})
 		return
@@ -141,4 +141,87 @@ func (h *Handler) RejectOrder(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"order_id": orderID, "order_status": "отклонён"})
+}
+
+type updateOrderReq struct {
+	Quantity int `json:"quantity" binding:"required,min=1"`
+}
+
+func (h *Handler) UpdateCustomerOrder(c *gin.Context) {
+	orderID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || orderID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный номер заказа"})
+		return
+	}
+	var req updateOrderReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Quantity > 99999 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Количество не должно превышать 99 999"})
+		return
+	}
+	cl := middleware.CurrentClaims(c)
+
+	var productID int
+	var status string
+	err = h.pool.QueryRow(c, `
+		SELECT product_id, order_status FROM "order"
+		WHERE order_id = $1 AND customer_id = $2`, orderID, cl.Subject).Scan(&productID, &status)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "заказ не найден"})
+		return
+	}
+	if status != "новый" {
+		c.JSON(http.StatusConflict, gin.H{"error": "изменить можно только заказ со статусом «новый»"})
+		return
+	}
+
+	var balance int
+	err = h.pool.QueryRow(c,
+		`SELECT fn_product_balance_available($1, NULL, $2)`, productID, orderID).Scan(&balance)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "товар не найден"})
+		return
+	}
+	if balance < req.Quantity {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Недостаточно товара на складе: доступно=%d, запрошено=%d", balance, req.Quantity),
+		})
+		return
+	}
+
+	_, err = h.pool.Exec(c, `
+		UPDATE "order" SET order_quantity = $1
+		WHERE order_id = $2 AND customer_id = $3 AND order_status = 'новый'`,
+		req.Quantity, orderID, cl.Subject)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": mapDBError(err)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"order_id": orderID, "order_quantity": req.Quantity})
+}
+
+func (h *Handler) DeleteCustomerOrder(c *gin.Context) {
+	orderID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || orderID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "некорректный номер заказа"})
+		return
+	}
+	cl := middleware.CurrentClaims(c)
+
+	res, err := h.pool.Exec(c, `
+		DELETE FROM "order"
+		WHERE order_id = $1 AND customer_id = $2 AND order_status = 'новый'`,
+		orderID, cl.Subject)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": mapDBError(err)})
+		return
+	}
+	if res.RowsAffected() == 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "заказ не найден или уже обработан"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"order_id": orderID, "deleted": true})
 }

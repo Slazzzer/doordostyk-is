@@ -52,9 +52,9 @@ func SeedPasswords(ctx context.Context, pool *pgxpool.Pool) error {
 		role     string
 		pwd      string
 	}{
-		{"Иноземцев Алексей Иванович", "admin", "administrator", "admin123"},
-		{"Куклачев Сергей Николаевич", "seller", "seller", "seller123"},
-		{"Иваньков Игорь Петрович", "storekeeper", "storekeeper", "store123"},
+		{"Гусев Иван Михайлович", "admin", "administrator", "admin123"},
+		{"Белослудцев Никита Викторович", "seller", "seller", "seller123"},
+		{"Осипов Павел Дмитриевич", "storekeeper", "storekeeper", "store123"},
 	}
 	for _, s := range staff {
 		b, err := bcrypt.GenerateFromPassword([]byte(s.pwd), bcrypt.DefaultCost)
@@ -80,34 +80,30 @@ func SeedPasswords(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 func EnsureSuppliers(ctx context.Context, pool *pgxpool.Pool) error {
-	suppliers := []struct {
-		name    string
-		address string
-		phone   string
-	}{
-		{`ООО "BRAVO DOORS"`, "г. Москва, ул. Энергетиков, д. 22", "+74954017456"},
-		{"ИП Гусев М.В.", "г. Москва, ул. Складская, 5", "+74953334402"},
-		{`ООО "СОМ"`, "г. Москва, ул. Промышленная, 12", "+74951112201"},
-		{`ООО "ДверьКомплект"`, "г. Москва, ул. Монтажная, 9", "+74952223344"},
-		{`ООО "ЛесПромТорг"`, "г. Москва, ул. Производственная, 18", "+74956667788"},
-	}
+	// Только переименование устаревших записей; новые поставщики — из db/03_seed.sql
 	renames := map[string]string{
 		"ООО BRAVO DOORS": `ООО "BRAVO DOORS"`,
 		"ООО СОМ":         `ООО "СОМ"`,
+		"ИП Гусев М.В.":   `ООО "ДекорПлюс"`,
+		"ИП Воронин А.И.": `ООО "ДекорПлюс"`,
 	}
 	for oldName, newName := range renames {
-		if _, err := pool.Exec(ctx, `UPDATE supplier SET organization_name = $1 WHERE organization_name = $2`, newName, oldName); err != nil {
+		if _, err := pool.Exec(ctx, `
+			UPDATE supplier SET organization_name = $1
+			WHERE organization_name = $2
+			AND NOT EXISTS (SELECT 1 FROM supplier WHERE organization_name = $1)`,
+			newName, oldName); err != nil {
 			return fmt.Errorf("rename supplier %s: %w", oldName, err)
 		}
 	}
-	for _, s := range suppliers {
-		if _, err := pool.Exec(ctx, `
-			INSERT INTO supplier(organization_name, supplier_address, supplier_phone_number)
-			SELECT $1::varchar, $2::varchar, $3::varchar
-			WHERE NOT EXISTS (SELECT 1 FROM supplier WHERE organization_name = $1)`,
-			s.name, s.address, s.phone); err != nil {
-			return fmt.Errorf("ensure supplier %s: %w", s.name, err)
-		}
+	// Удалить дубликаты поставщиков (оставить запись с минимальным id)
+	_, err := pool.Exec(ctx, `
+		DELETE FROM supplier s
+		USING supplier d
+		WHERE s.organization_name = d.organization_name
+		  AND s.supplier_id > d.supplier_id`)
+	if err != nil {
+		return fmt.Errorf("dedupe suppliers: %w", err)
 	}
 	return nil
 }
@@ -160,6 +156,69 @@ func EnsureExtraProducts(ctx context.Context, pool *pgxpool.Pool) error {
 			return fmt.Errorf("extra receipt %s: %w", it.name, err)
 		}
 		log.Printf("seed: ensured catalog product %s", it.name)
+	}
+	return nil
+}
+
+// EnsureDecorationCategory добавляет категорию «Декор для дверей» и товары (старые тома БД).
+func EnsureDecorationCategory(ctx context.Context, pool *pgxpool.Pool) error {
+	_, err := pool.Exec(ctx, `
+		INSERT INTO category (category_name, category_description)
+		SELECT 'Декор для дверей', 'Украшения, таблички, венки и аксессуары для оформления двери'
+		WHERE NOT EXISTS (SELECT 1 FROM category WHERE category_name = 'Декор для дверей')`)
+	if err != nil {
+		return fmt.Errorf("ensure decor category: %w", err)
+	}
+	var categoryID int
+	if err := pool.QueryRow(ctx, `SELECT category_id FROM category WHERE category_name = 'Декор для дверей' LIMIT 1`).Scan(&categoryID); err != nil {
+		return nil
+	}
+	type extra struct {
+		name     string
+		desc     string
+		dims     *string
+		purchase float64
+		retail   float64
+		supplier int
+		qty      int
+	}
+	items := []extra{
+		{"Венок на дверь «Новогодний»", "Искусственная хвоя, красные ягоды", strPtr("Ø 35 см"), 890, 1290, 4, 40},
+		{"Табличка на дверь «Добро пожаловать»", "Металл, крепление на липучке", strPtr("20×8 см"), 420, 650, 4, 35},
+		{"Молоток дверной «Классик»", "Латунь, полированная поверхность", nil, 1850, 2650, 3, 15},
+		{"Номер квартиры «Современный»", "Акрил, цифры 0–9 в комплекте", strPtr("12×4 см"), 310, 490, 4, 50},
+		{"Наклейка на дверь «Цветы»", "Винил, съёмная без следов", strPtr("30×60 см"), 180, 290, 2, 80},
+	}
+	var storekeeperID int
+	if err := pool.QueryRow(ctx, `SELECT user_id FROM "user" WHERE user_role = 'storekeeper' LIMIT 1`).Scan(&storekeeperID); err != nil {
+		return nil
+	}
+	for _, it := range items {
+		var productID int
+		err := pool.QueryRow(ctx, `
+			INSERT INTO product (category_id, product_name, product_description, product_dimensions,
+			                     product_purchase_price, product_retail_price)
+			SELECT $1::integer, $2::varchar, $3::text, $4::varchar, $5::decimal, $6::decimal
+			WHERE NOT EXISTS (SELECT 1 FROM product WHERE product_name = $2)
+			RETURNING product_id`,
+			categoryID, it.name, it.desc, it.dims, it.purchase, it.retail).Scan(&productID)
+		if err != nil {
+			if strings.Contains(err.Error(), "no rows") {
+				continue
+			}
+			return fmt.Errorf("decor product %s: %w", it.name, err)
+		}
+		_, err = pool.Exec(ctx, `
+			INSERT INTO receipt (supplier_id, user_id, product_id, receipt_date, receipt_quantity, receipt_purchase_price)
+			SELECT $1, $2, $3, CURRENT_DATE, $4, $5
+			WHERE NOT EXISTS (
+				SELECT 1 FROM receipt r WHERE r.product_id = $3 AND r.receipt_date = CURRENT_DATE
+			)`,
+			it.supplier, storekeeperID, productID, it.qty, it.purchase)
+		if err != nil {
+			return fmt.Errorf("decor receipt %s: %w", it.name, err)
+		}
+		log.Printf("seed: ensured decor product %s", it.name)
 	}
 	return nil
 }

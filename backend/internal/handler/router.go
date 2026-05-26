@@ -61,6 +61,8 @@ func NewRouter(pool *pgxpool.Pool, cfg *config.Config) *gin.Engine {
 			{
 				cust.POST("/orders", h.CreateOrderByCustomer)
 				cust.GET("/orders/my", h.MyOrders)
+				cust.PATCH("/orders/:id", h.UpdateCustomerOrder)
+				cust.DELETE("/orders/:id", h.DeleteCustomerOrder)
 			}
 
 			seller := secured.Group("/seller")

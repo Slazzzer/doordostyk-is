@@ -2,6 +2,8 @@
 import { ref, onMounted, computed } from 'vue'
 import api from '../api.js'
 import { useAuthStore } from '../stores/auth.js'
+import { usePagination } from '../composables/usePagination.js'
+import PaginationBar from '../components/PaginationBar.vue'
 
 const auth = useAuthStore()
 const items = ref([])
@@ -20,6 +22,7 @@ async function load() {
 
 const totalBalance = computed(() => items.value.reduce((s, i) => s + i.balance, 0))
 const lowCount = computed(() => items.value.filter(i => i.balance < 5).length)
+const { page, pageSize, total, paged } = usePagination(items, 10)
 
 onMounted(async () => {
   const c = await api.get('/catalog/categories')
@@ -64,7 +67,7 @@ const fmt = n => n == null ? '-' : new Intl.NumberFormat('ru-RU').format(n) + ' 
         </tr>
       </thead>
       <tbody>
-        <tr v-for="i in items" :key="i.product_id">
+        <tr v-for="i in paged" :key="i.product_id">
           <td>{{ i.category_name }}</td>
           <td>{{ i.product_name }}</td>
           <td>{{ i.product_dimensions || '-' }}</td>
@@ -80,6 +83,7 @@ const fmt = n => n == null ? '-' : new Intl.NumberFormat('ru-RU').format(n) + ' 
       </tbody>
     </table>
   </div>
+  <PaginationBar v-if="items.length" v-model:page="page" :page-size="pageSize" :total="total" />
 </template>
 
 <style scoped>

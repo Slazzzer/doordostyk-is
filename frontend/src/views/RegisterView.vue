@@ -64,7 +64,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="login-wrap">
+  <div class="auth-page-wrap">
     <div class="card" style="max-width:480px; width:100%">
       <h2>Регистрация клиента</h2>
       <form @submit.prevent="submit">
@@ -106,6 +106,5 @@ async function submit() {
 </template>
 
 <style scoped>
-.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 60vh; }
 .field-error { display: block; font-size: 12px; color: var(--danger); margin-top: 4px; }
 </style>

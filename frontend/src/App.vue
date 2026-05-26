@@ -1,15 +1,39 @@
 <script setup>
 import { useAuthStore } from './stores/auth.js'
 import { useToastStore } from './stores/toast.js'
-import { useRouter } from 'vue-router'
-import { computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { computed, ref, watch, onMounted } from 'vue'
 import ToastContainer from './components/ToastContainer.vue'
+import WelcomeCurtain from './components/WelcomeCurtain.vue'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 const router = useRouter()
+const route = useRoute()
+
+const showWelcome = ref(false)
+const WELCOME_KEY = 'dd_welcome_done'
+
+function tryShowWelcome() {
+  if (route.path !== '/catalog') return
+  if (sessionStorage.getItem(WELCOME_KEY)) return
+  showWelcome.value = true
+}
+
+function onWelcomeDone() {
+  sessionStorage.setItem(WELCOME_KEY, '1')
+  showWelcome.value = false
+}
+
+onMounted(tryShowWelcome)
+watch(() => route.path, tryShowWelcome)
+
+const centerContent = computed(() =>
+  route.path === '/login' || route.path === '/register'
+)
 
 function logout() {
+  if (!confirm('Вы уверены, что хотите выйти из системы?')) return
   auth.logout()
   toast.push('Вы вышли из системы', 'info')
   router.push('/catalog')
@@ -24,8 +48,10 @@ const roleLabel = computed(() => {
 
 <template>
   <div class="layout">
+    <WelcomeCurtain v-if="showWelcome" @done="onWelcomeDone" />
+
     <header class="topbar">
-      <router-link to="/" class="brand">
+      <router-link to="/catalog" class="brand brand-interactive">
         <span class="brand-icon">🚪</span>
         <span class="brand-text">Дверной Достык</span>
       </router-link>
@@ -54,7 +80,7 @@ const roleLabel = computed(() => {
       </div>
     </header>
 
-    <main class="content">
+    <main class="content" :class="{ 'content--centered': centerContent }">
       <router-view />
     </main>
 
@@ -86,8 +112,20 @@ const roleLabel = computed(() => {
 }
 .brand { display: flex; align-items: center; gap: 8px; color: white; font-weight: 700; font-size: 17px; }
 .brand:hover { text-decoration: none; }
-.brand-icon { font-size: 24px; }
-.brand-text { user-select: none; }
+.brand-icon {
+  font-size: 24px;
+  display: inline-block;
+  transform-origin: center center;
+  transition: transform 0.45s ease;
+}
+.brand-text {
+  user-select: none;
+  display: inline-block;
+  transform-origin: left center;
+  transition: transform 0.35s ease;
+}
+.brand-interactive:hover .brand-icon { transform: rotate(90deg); }
+.brand-interactive:hover .brand-text { transform: scale(0.88); }
 .nav { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
 .nav a {
   color: rgba(255,255,255,0.85);
@@ -103,6 +141,12 @@ const roleLabel = computed(() => {
 .topbar button { user-select: none; }
 
 .content { flex: 1; max-width: 1280px; width: 100%; margin: 0 auto; padding: 24px; }
+.content--centered {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+}
 
 .footer {
   text-align: center;

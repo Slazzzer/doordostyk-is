@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import PaginationBar from '../components/PaginationBar.vue'
+import { applyRobotoFont } from '../utils/jspdfRoboto.js'
 
 const auth = useAuthStore()
 const tab = ref('sales')
@@ -35,6 +36,17 @@ const canSeeReceipts = computed(() => auth.isStoreman || auth.isAdmin)
 const pagedSalesRows = computed(() => salesRows.value.slice((page.value - 1) * pageSize, page.value * pageSize))
 const pagedReceiptsRows = computed(() => receiptsRows.value.slice((page.value - 1) * pageSize, page.value * pageSize))
 
+const fmtDate = d => {
+  if (!d) return ''
+  const s = String(d).slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, day] = s.split('-')
+    return `${day}.${m}.${y}`
+  }
+  return new Date(d).toLocaleDateString('ru-RU')
+}
+const fmt = n => new Intl.NumberFormat('ru-RU').format(n) + ' ₽'
+
 async function loadReport() {
   loading.value = true
   try {
@@ -61,11 +73,11 @@ function exportCSV() {
   let header, rows
   if (tab.value === 'sales') {
     header = ['№', 'Дата', 'Категория', 'Товар', 'Размеры', 'Кол-во', 'Цена', 'Сумма', 'Продавец']
-    rows = salesRows.value.map(r => [r.sale_id, r.sale_date, r.category_name, r.product_name,
+    rows = salesRows.value.map(r => [r.sale_id, fmtDate(r.sale_date), r.category_name, r.product_name,
       r.product_dimensions||'', r.sale_quantity, r.sale_price, r.sale_amount, r.seller_name])
   } else {
     header = ['№', 'Дата', 'Поставщик', 'Категория', 'Товар', 'Кол-во', 'Цена', 'Сумма']
-    rows = receiptsRows.value.map(r => [r.receipt_id, r.receipt_date, r.supplier_name, r.category_name,
+    rows = receiptsRows.value.map(r => [r.receipt_id, fmtDate(r.receipt_date), r.supplier_name, r.category_name,
       r.product_name, r.receipt_quantity, r.receipt_purchase_price, r.receipt_amount])
   }
   const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n')
@@ -80,11 +92,11 @@ function exportExcel() {
   let header, rows
   if (tab.value === 'sales') {
     header = ['№', 'Дата', 'Категория', 'Товар', 'Размеры', 'Кол-во', 'Цена', 'Сумма', 'Продавец']
-    rows = salesRows.value.map(r => [r.sale_id, r.sale_date, r.category_name, r.product_name,
+    rows = salesRows.value.map(r => [r.sale_id, fmtDate(r.sale_date), r.category_name, r.product_name,
       r.product_dimensions || '', r.sale_quantity, r.sale_price, r.sale_amount, r.seller_name])
   } else {
     header = ['№', 'Дата', 'Поставщик', 'Категория', 'Товар', 'Кол-во', 'Цена', 'Сумма']
-    rows = receiptsRows.value.map(r => [r.receipt_id, r.receipt_date, r.supplier_name, r.category_name,
+    rows = receiptsRows.value.map(r => [r.receipt_id, fmtDate(r.receipt_date), r.supplier_name, r.category_name,
       r.product_name, r.receipt_quantity, r.receipt_purchase_price, r.receipt_amount])
   }
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
@@ -93,41 +105,41 @@ function exportExcel() {
   XLSX.writeFile(wb, `report-${tab.value}-${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
-function exportPDF() {
+async function exportPDF() {
   const doc = new jsPDF('l', 'pt', 'a4')
-  doc.setFont('helvetica', 'normal')
+  await applyRobotoFont(doc)
   const isSales = tab.value === 'sales'
   const title = isSales ? 'Отчёт по продажам' : 'Отчёт по поступлениям'
   const subtitle = `Дата формирования: ${new Date().toLocaleString('ru-RU')}`
   const fromText = fromDate.value ? fmtDate(fromDate.value) : 'начало'
   const toText = toDate.value ? fmtDate(toDate.value) : 'текущая дата'
   doc.setFontSize(16)
-  doc.text(pdfText(title), 40, 36)
+  doc.text(title, 40, 36)
   doc.setFontSize(10)
-  doc.text(pdfText(subtitle), 40, 54)
-  doc.text(pdfText(`Период: ${fromText} - ${toText}`), 40, 68)
+  doc.text(subtitle, 40, 54)
+  doc.text(`Период: ${fromText} — ${toText}`, 40, 68)
 
   const head = isSales
-    ? [['N', 'Data', 'Kategoriya', 'Tovar', 'Kol-vo', 'Tsena', 'Summa', 'Prodavets']]
-    : [['N', 'Data', 'Postavshchik', 'Kategoriya', 'Tovar', 'Kol-vo', 'Tsena', 'Summa']]
+    ? [['№', 'Дата', 'Категория', 'Товар', 'Кол-во', 'Цена', 'Сумма', 'Продавец']]
+    : [['№', 'Дата', 'Поставщик', 'Категория', 'Товар', 'Кол-во', 'Цена', 'Сумма']]
   const body = isSales
-    ? salesRows.value.map(r => [r.sale_id, fmtDate(r.sale_date), pdfText(r.category_name), pdfText(r.product_name), r.sale_quantity, fmtPdf(r.sale_price), fmtPdf(r.sale_amount), pdfText(r.seller_name)])
-    : receiptsRows.value.map(r => [r.receipt_id, fmtDate(r.receipt_date), pdfText(r.supplier_name), pdfText(r.category_name), pdfText(r.product_name), r.receipt_quantity, fmtPdf(r.receipt_purchase_price), fmtPdf(r.receipt_amount)])
+    ? salesRows.value.map(r => [r.sale_id, fmtDate(r.sale_date), r.category_name, r.product_name, r.sale_quantity, fmt(r.sale_price), fmt(r.sale_amount), r.seller_name])
+    : receiptsRows.value.map(r => [r.receipt_id, fmtDate(r.receipt_date), r.supplier_name, r.category_name, r.product_name, r.receipt_quantity, fmt(r.receipt_purchase_price), fmt(r.receipt_amount)])
 
   autoTable(doc, {
     startY: 82,
     head,
     body,
-    styles: { fontSize: 9, cellPadding: 4 },
-    headStyles: { fillColor: [0, 137, 123], textColor: [255, 255, 255], halign: 'center' },
-    bodyStyles: { textColor: [43, 43, 43] },
+    styles: { font: 'Roboto', fontSize: 9, cellPadding: 4 },
+    headStyles: { font: 'Roboto', fillColor: [0, 137, 123], textColor: [255, 255, 255], halign: 'center' },
+    bodyStyles: { font: 'Roboto', textColor: [43, 43, 43] },
     alternateRowStyles: { fillColor: [245, 250, 249] },
     margin: { left: 30, right: 30 }
   })
 
   const totalText = isSales
-    ? `Itogo: ${salesTotalQty.value} sht., ${fmtPdf(salesTotalAmount.value)}`
-    : `Itogo: ${receiptsTotalQty.value} sht., ${fmtPdf(receiptsTotalAmount.value)}`
+    ? `Итого: ${salesTotalQty.value} шт., ${fmt(salesTotalAmount.value)}`
+    : `Итого: ${receiptsTotalQty.value} шт., ${fmt(receiptsTotalAmount.value)}`
   doc.text(totalText, 40, doc.internal.pageSize.getHeight() - 24)
   doc.save(`report-${tab.value}-${new Date().toISOString().slice(0, 10)}.pdf`)
 }
@@ -136,23 +148,6 @@ function exportReport() {
   if (exportFormat.value === 'csv') return exportCSV()
   if (exportFormat.value === 'excel') return exportExcel()
   if (exportFormat.value === 'pdf') return exportPDF()
-}
-
-const fmtDate = d => new Date(d).toLocaleDateString('ru-RU')
-const fmt = n => new Intl.NumberFormat('ru-RU').format(n) + ' ₽'
-const fmtPdf = n => new Intl.NumberFormat('ru-RU').format(n) + ' RUB'
-
-function pdfText(value) {
-  const map = {
-    А: 'A', Б: 'B', В: 'V', Г: 'G', Д: 'D', Е: 'E', Ё: 'E', Ж: 'Zh', З: 'Z', И: 'I', Й: 'Y',
-    К: 'K', Л: 'L', М: 'M', Н: 'N', О: 'O', П: 'P', Р: 'R', С: 'S', Т: 'T', У: 'U', Ф: 'F',
-    Х: 'Kh', Ц: 'Ts', Ч: 'Ch', Ш: 'Sh', Щ: 'Shch', Ъ: '', Ы: 'Y', Ь: '', Э: 'E', Ю: 'Yu', Я: 'Ya',
-    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y',
-    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
-    х: 'kh', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
-    '«': '"', '»': '"', '№': 'N', '₽': 'RUB'
-  }
-  return String(value ?? '').replace(/[А-Яа-яЁё«»№₽]/g, ch => map[ch] ?? ch)
 }
 
 onMounted(async () => {

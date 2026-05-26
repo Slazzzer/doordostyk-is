@@ -11,7 +11,7 @@ const toast = useToastStore()
 const router = useRouter()
 const { showFlash } = useFlash()
 
-const mode = ref('user')
+const mode = ref('customer')
 const login = ref('')
 const email = ref('')
 const password = ref('')
@@ -38,13 +38,13 @@ async function submit() {
 </script>
 
 <template>
-  <div class="login-wrap">
+  <div class="auth-page-wrap">
     <div class="card login-card">
       <h2>Вход в систему</h2>
 
       <div class="tabs">
-        <button :class="['tab', mode==='user' && 'active']" @click="mode='user'" type="button">Сотрудник</button>
         <button :class="['tab', mode==='customer' && 'active']" @click="mode='customer'" type="button">Клиент</button>
+        <button :class="['tab', mode==='user' && 'active']" @click="mode='user'" type="button">Сотрудник</button>
       </div>
 
       <form @submit.prevent="submit">
@@ -75,7 +75,6 @@ async function submit() {
 </template>
 
 <style scoped>
-.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 60vh; }
 .login-card { width: 100%; max-width: 400px; }
 .tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
 .tab {
