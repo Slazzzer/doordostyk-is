@@ -1,0 +1,56 @@
+name: doordostyk-is
+
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: doordostyk-is-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      LANG: ru_RU.UTF-8
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./db:/docker-entrypoint-initdb.d:ro
+    networks: [dostyk-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: doordostyk-is-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      HTTP_PORT: "8080"
+      GIN_MODE: release
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [dostyk-net]
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: doordostyk-is-web
+    restart: unless-stopped
+    ports:
+      - "9093:80"
+    depends_on:
+      - api
+    networks: [dostyk-net]
+
+networks:
+  dostyk-net:
+    driver: bridge
+
+volumes:
+  pgdata:
